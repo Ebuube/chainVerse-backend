@@ -1,7 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const borrowController = require("../controllers/borrowController");
-const { authenticate } = require("../middlewares/authMiddleware");
+const auth = require("../middlewares/authMiddleware");
+
+// Test Router Imports
+console.log("auth:", auth);
+console.log("auth.authMiddleware:", auth.authMiddleware);
+console.log("borrowController.createBorrow:", borrowController.createBorrow);
+// End of Test Router Imports
 
 /**
  * @swagger
@@ -33,7 +39,7 @@ const { authenticate } = require("../middlewares/authMiddleware");
  *                 type: number
  *                 default: 14
  */
-router.post("/", authenticate, borrowController.createBorrow);
+router.post("/", auth.authMiddleware, borrowController.createBorrow);
 
 /**
  * @swagger
@@ -44,7 +50,7 @@ router.post("/", authenticate, borrowController.createBorrow);
  *     security:
  *       - BearerAuth: []
  */
-router.get("/", authenticate, borrowController.getUserBorrows);
+router.get("/", auth.authMiddleware, borrowController.getUserBorrows);
 
 /**
  * @swagger
@@ -55,7 +61,7 @@ router.get("/", authenticate, borrowController.getUserBorrows);
  *     security:
  *       - BearerAuth: []
  */
-router.get("/stats", authenticate, borrowController.getBorrowStats);
+router.get("/stats", auth.authMiddleware, borrowController.getBorrowStats);
 
 /**
  * @swagger
@@ -66,7 +72,7 @@ router.get("/stats", authenticate, borrowController.getBorrowStats);
  *     security:
  *       - BearerAuth: []
  */
-router.patch("/:id/return", authenticate, borrowController.returnBorrow);
+router.patch("/:id/return", auth.authMiddleware, borrowController.returnBorrow);
 
 /**
  * @swagger
@@ -77,6 +83,6 @@ router.patch("/:id/return", authenticate, borrowController.returnBorrow);
  *     security:
  *       - BearerAuth: []
  */
-router.patch("/:id/renew", authenticate, borrowController.renewBorrow);
+router.patch("/:id/renew", auth.authMiddleware, borrowController.renewBorrow);
 
 module.exports = router;
