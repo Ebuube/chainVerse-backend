@@ -1,5 +1,5 @@
 const Redis = require('redis');
-const { promisify } = require('util');
+// const { promisify } = require('util');
 const logger = require('../utils/logger');
 
 class RateLimitService {
@@ -36,46 +36,43 @@ class RateLimitService {
     };
   }
 
-  async initRedis() {
-    try {
-      if (process.env.NODE_ENV === 'development' && !process.env.FORCE_REDIS) {
-        logger.info('Rate limiting using in-memory store (development mode)');
-        return;
-      }
+async initRedis() {
+  const forceRedis = String(process.env.FORCE_REDIS).toLowerCase() === 'true';
 
-      this.redisClient = Redis.createClient({
-        url: this.config.redisUrl,
-        retry_strategy: (options) => {
-          if (options.error && options.error.code === 'ECONNREFUSED') {
-            logger.error('Redis connection refused');
-            return new Error('Redis connection refused');
-          }
-          if (options.total_retry_time > 1000 * 60 * 60) {
-            return new Error('Retry time exhausted');
-          }
-          if (options.attempt > 10) {
-            return undefined;
-          }
-          return Math.min(options.attempt * 100, 3000);
-        }
-      });
-
-      this.redisClient.on('connect', () => {
-        logger.info('Redis connected for rate limiting');
-        this.isRedisConnected = true;
-      });
-
-      this.redisClient.on('error', (err) => {
-        logger.error('Redis error:', err);
-        this.isRedisConnected = false;
-      });
-
-      await this.redisClient.connect();
-    } catch (error) {
-      logger.error('Failed to initialize Redis for rate limiting:', error);
-      this.isRedisConnected = false;
-    }
+  if (!forceRedis) {
+    logger.info('Rate limiting using in-memory store (FORCE_REDIS=false)');
+    return;
   }
+
+  try {
+    this.redisClient = Redis.createClient({
+      url: this.config.redisUrl,
+      socket: {
+        tls: true,
+        rejectUnauthorized: false,
+        reconnectStrategy: (retries) => {
+          if (retries > 10) return new Error('Retry attempts exhausted');
+          return Math.min(retries * 100, 3000);
+        },
+      },
+    });
+
+    this.redisClient.on('connect', () => {
+      logger.info('Redis connected for rate limiting');
+      this.isRedisConnected = true;
+    });
+
+    this.redisClient.on('error', (err) => {
+      logger.error('Redis error:', err);
+      this.isRedisConnected = false;
+    });
+
+    await this.redisClient.connect();
+  } catch (error) {
+    logger.error('Failed to initialize Redis for rate limiting:', error);
+    this.isRedisConnected = false;
+  }
+}
 
   getUserType(req) {
     if (req.user) {
@@ -92,19 +89,19 @@ class RateLimitService {
 
   getKeyIdentifier(req) {
     const userType = this.getUserType(req);
-    
+
     if (req.user && req.user._id) {
       return `user:${req.user._id}`;
     }
-    
-    const ip = req.ip || 
-               req.connection.remoteAddress || 
+
+    const ip = req.ip ||
+               req.connection.remoteAddress ||
                req.socket.remoteAddress ||
                (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
                req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                req.headers['x-real-ip'] ||
                'unknown';
-    
+
     return `ip:${ip}`;
   }
 
@@ -118,7 +115,7 @@ class RateLimitService {
         return null;
       }
     }
-    
+
     if (!this.memoryStore) {
       this.memoryStore = new Map();
     }
@@ -135,7 +132,7 @@ class RateLimitService {
         return false;
       }
     }
-    
+
     if (!this.memoryStore) {
       this.memoryStore = new Map();
     }
@@ -145,7 +142,7 @@ class RateLimitService {
         this.memoryStore.delete(key);
       }
     }, ttl * 1000);
-    
+
     return true;
   }
 
@@ -164,12 +161,12 @@ class RateLimitService {
     const limits = this.config[userType];
     const identifier = this.getKeyIdentifier(req);
     const key = `${this.config.keyPrefix}${identifier}`;
-    
+
     const now = Date.now();
     const windowStart = now - limits.windowMs;
-    
+
     let rateLimitData = await this.getRateLimitData(key);
-    
+
     if (!rateLimitData || rateLimitData.resetTime <= now) {
       rateLimitData = {
         count: 1,
@@ -181,14 +178,14 @@ class RateLimitService {
       rateLimitData.requests.push(now);
       rateLimitData.count = rateLimitData.requests.length;
     }
-    
+
     const remaining = Math.max(0, limits.maxRequests - rateLimitData.count);
     const allowed = rateLimitData.count <= limits.maxRequests;
     const retryAfter = allowed ? 0 : Math.ceil((rateLimitData.resetTime - now) / 1000);
-    
+
     const ttl = Math.ceil((rateLimitData.resetTime - now) / 1000);
     await this.setRateLimitData(key, rateLimitData, ttl);
-    
+
     if (!allowed) {
       logger.warn(`Rate limit exceeded for ${userType} ${identifier}`, {
         userType,
@@ -198,7 +195,7 @@ class RateLimitService {
         retryAfter
       });
     }
-    
+
     return {
       allowed,
       limit: limits.maxRequests,
@@ -221,7 +218,7 @@ class RateLimitService {
 
   async clearRateLimit(identifier) {
     const key = `${this.config.keyPrefix}${identifier}`;
-    
+
     if (this.isRedisConnected && this.redisClient) {
       try {
         await this.redisClient.del(key);
@@ -231,11 +228,11 @@ class RateLimitService {
         return false;
       }
     }
-    
+
     if (this.memoryStore) {
       this.memoryStore.delete(key);
     }
-    
+
     return true;
   }
 
