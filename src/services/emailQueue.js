@@ -2,25 +2,38 @@ const { Queue } = require("bullmq");
 
 const QUEUE_NAME = "email-sending-queue";
 
-const emailQueue = new Queue(QUEUE_NAME, {
-  connection: {
-    url: process.env.REDIS_URL || "redis://localhost:6379",
-  },
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: "exponential",
-      delay: 2000,
-    },
-    removeOnComplete: 100,
-    removeOnFail: 1000,
-  },
-});
+let emailQueue = null;
+
+// Only initialize queue if Redis is available and FORCE_REDIS is true
+if (process.env.REDIS_URL && process.env.FORCE_REDIS === 'true') {
+  try {
+    emailQueue = new Queue(QUEUE_NAME, {
+      connection: {
+        url: process.env.REDIS_URL,
+      },
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: "exponential",
+          delay: 2000,
+        },
+        removeOnComplete: 100,
+        removeOnFail: 1000,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to initialize email queue:', error.message);
+  }
+}
 
 /**
  * Add email job to queue
  */
 const addEmailJob = async (emailData) => {
+  if (!emailQueue) {
+    console.warn('Email queue not available - email job skipped');
+    return null;
+  }
   try {
     const job = await emailQueue.add("send-email", emailData, {
       priority: emailData.priority || 5,
@@ -38,6 +51,10 @@ const addEmailJob = async (emailData) => {
  * Add bulk email jobs
  */
 const addBulkEmailJobs = async (emailsData) => {
+  if (!emailQueue) {
+    console.warn('Email queue not available - bulk email jobs skipped');
+    return [];
+  }
   try {
     const jobs = emailsData.map((emailData) => ({
       name: "send-email",
