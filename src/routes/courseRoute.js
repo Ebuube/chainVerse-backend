@@ -12,15 +12,29 @@ const courseModeratorController = require('../controllers/courseModeratorControl
 const { authMiddleware, roleMiddleware } = require('../middlewares/auth');
 const {
 	completeCourse,
-	getCertificate,
-} = require('../controllers/certificateController');
+	getCertificateById,
+// } = require('../controllers/certificateController');
+} =  require('../controllers/certificateController');
 const { mintNft } = require('../controllers/nftController');
 const bookController = require('../controllers/bookController');
 
+// Testing Route Imports
 
+console.log("auth.authenticate:", auth.authenticate);
+console.log("auth.hasRole:", auth.hasRole);
+
+console.log("courseController.createCourse:", courseController.createCourse);
+console.log("adminCourseController.getAllCourses:", adminCourseController.getAllCourses);
+console.log("courseModeratorController.getAssignedCourses:", courseModeratorController.getAssignedCourses);
+console.log("bookController.getCourseBooks:", bookController.getCourseBooks);
+// console.log("getCertificate:", getCertificate);
+console.log("getCertificateById:", getCertificateById);
+
+// End of Testing Route Imports
 router.post('/courses', auth.authenticate, isAdmin.ensureAdmin, courseController.createCourse);
 router.post('/:id/complete', auth.authenticate, completeCourse);
-router.get('/:id/certificate', auth.authenticate, getCertificate);
+// router.get('/:id/certificate', auth.authenticate, getCertificate);
+router.get('/:id/certificate', auth.authenticate, getCertificateById);
 router.post('/:id/mint-nft', auth.authenticate, mintNft);
 //router.get('/courses/public', publicRateLimitMiddleware, courseController.getPublicCourses);
 
