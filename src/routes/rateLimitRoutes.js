@@ -308,8 +308,4 @@ router.get('/stats/:identifier', authMiddleware,  isAdmin.ensureAdmin, rateLimit
  */
 router.delete('/clear/:identifier', authMiddleware,  isAdmin.ensureAdmin, rateLimitController.clearRateLimit);
 
-/**
- * @swagger
- */
- 
 module.exports = router;
