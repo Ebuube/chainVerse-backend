@@ -47,14 +47,14 @@ async initRedis() {
   try {
     this.redisClient = Redis.createClient({
       url: this.config.redisUrl,
+      /*
       socket: {
-        tls: true,
-        rejectUnauthorized: false,
         reconnectStrategy: (retries) => {
           if (retries > 10) return new Error('Retry attempts exhausted');
           return Math.min(retries * 100, 3000);
         },
       },
+      */
     });
 
     this.redisClient.on('connect', () => {
