@@ -9,7 +9,7 @@ const dbConnect = require('../config/database/connection');
 const QUEUE_NAME = 'email-sending-queue';
 
 async function connectToDatabase() {
-  if (mongoose.connection.readyState === 0) { 
+  if (mongoose.connection.readyState === 0) {
     await dbConnect();
     console.log('Email Worker: MongoDB connected');
   }
@@ -75,24 +75,33 @@ const processEmailJob = async (job) => {
   }
 };
 
-const emailWorker = new Worker(QUEUE_NAME, processEmailJob, {
-  connection: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-  },
-  concurrency: 5,
-  removeOnComplete: { count: 1000 },
-  removeOnFail: { count: 5000 },
-});
+// Only start worker if Redis is available and enabled
+if (process.env.REDIS_URL && process.env.FORCE_REDIS === 'true') {
+  try {
+    const emailWorker = new Worker(QUEUE_NAME, processEmailJob, {
+      connection: {
+        url: process.env.REDIS_URL,
+      },
+      concurrency: 5,
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 5000 },
+    });
 
-console.log(`📧 Email worker started for queue: ${QUEUE_NAME}`);
+    console.log(`📧 Email worker started for queue: ${QUEUE_NAME}`);
 
-emailWorker.on('completed', (job) => {
-  console.log(`Job ${job.id} (type: ${job.name}) has completed.`);
-});
+    emailWorker.on('completed', (job) => {
+      console.log(`Job ${job.id} (type: ${job.name}) has completed.`);
+    });
 
-emailWorker.on('failed', (job, err) => {
-  console.error(`Job ${job.id} (type: ${job.name}) has failed with error: ${err.message}`);
-});
+    emailWorker.on('failed', (job, err) => {
+      console.error(`Job ${job.id} (type: ${job.name}) has failed with error: ${err.message}`);
+    });
 
-process.on('SIGTERM', () => emailWorker.close());
-process.on('SIGINT', () => emailWorker.close());
+    process.on('SIGTERM', () => emailWorker.close());
+    process.on('SIGINT', () => emailWorker.close());
+  } catch (error) {
+    console.error('Failed to start email worker:', error.message);
+  }
+} else {
+  console.log('📧 Email worker disabled (Redis not available)');
+}
