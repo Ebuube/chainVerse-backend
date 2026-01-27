@@ -96,6 +96,7 @@ CertificateSchema.index({ publicHash: 1 });
 
 module.exports = mongoose.model('Certificate', CertificateSchema);
 
+/*
 const mongoose = require("mongoose");
 
 const CertificateSchema = new mongoose.Schema({
@@ -107,3 +108,4 @@ const CertificateSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.models.Certificate || mongoose.model("Certificate", CertificateSchema);
+*/
