@@ -3,12 +3,6 @@ const router = express.Router();
 const borrowController = require("../controllers/borrowController");
 const auth = require("../middlewares/authMiddleware");
 
-// Test Router Imports
-console.log("auth:", auth);
-console.log("auth.authMiddleware:", auth.authMiddleware);
-console.log("borrowController.createBorrow:", borrowController.createBorrow);
-// End of Test Router Imports
-
 /**
  * @swagger
  * /api/borrows:
