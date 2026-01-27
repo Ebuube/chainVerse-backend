@@ -33,7 +33,7 @@ const studentCartRoutes = require("./src/routes/studentCartRoutes");
 const studentAccountRoutes = require("./src/routes/studentAccountRoutes");
 const borrowRoutes = require("./src/routes/borrowRoutes");
 const notificationRoutes = require("./src/routes/notifications");
-// const setupSwaggerDocs = require('./swagger');
+const setupSwaggerDocs = require("./src/config/swaggerConfig");
 
 const dbConnection = require("./src/config/database/connection");
 const router = require("./src/routes/index");
@@ -98,8 +98,11 @@ app.get("/", (req, res) => {
   res.send("Welcome to ChainVerse Academy");
 });
 
+// Convenience redirect
+app.get('/api-doc', (req, res) => res.redirect(301, '/api-docs'));
+
 // Swagger
-// setupSwaggerDocs(app);
+setupSwaggerDocs(app);
 
 // 404 handler
 app.use((req, res, next) => {
