@@ -2,11 +2,20 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 const { Queue } = require("bullmq");
 
-const emailQueue = new Queue('email-sending-queue', {
-  connection: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+let emailQueue = null;
+
+// Only initialize queue if Redis is available and enabled
+if (process.env.REDIS_URL && process.env.FORCE_REDIS === 'true') {
+  try {
+    emailQueue = new Queue('email-sending-queue', {
+      connection: {
+        url: process.env.REDIS_URL,
+      }
+    });
+  } catch (error) {
+    console.error('Failed to initialize email queue in notificationService:', error.message);
   }
-});
+}
 
 class NotificationService {
   // Create notification for course updates
@@ -123,16 +132,18 @@ class NotificationService {
         },
       });
       await notification.save();
-      
-      await emailQueue.add('sendChallengeReceivedEmail', {
-        recipientId: challengedStudentId,
-        challengerName: challengerName,
-        courseTitle: courseTitle,
-        topic: topic,
-        challengeId: challengeId,
-        challengeLink: `${process.env.FRONTEND_URL}/challenges/${challengeId}`,
-        templateName: 'challengeReceived',
-      });
+
+      if (emailQueue) {
+        await emailQueue.add('sendChallengeReceivedEmail', {
+          recipientId: challengedStudentId,
+          challengerName: challengerName,
+          courseTitle: courseTitle,
+          topic: topic,
+          challengeId: challengeId,
+          challengeLink: `${process.env.FRONTEND_URL}/challenges/${challengeId}`,
+          templateName: 'challengeReceived',
+        });
+      }
 
       return notification;
     } catch (error) {
@@ -151,18 +162,20 @@ class NotificationService {
         metadata: { challengeId, opponentName, courseTitle, outcome, yourScore, opponentScore, matchSummaryLink },
       });
       await notification.save();
-      
-      await emailQueue.add('sendChallengeResultEmail', {
-        recipientId: participantId,
-        opponentName,
-        courseTitle,
-        outcome,
-        yourScore,
-        opponentScore,
-        matchSummaryLink: `${process.env.FRONTEND_URL}${matchSummaryLink}`,
-        challengeId,
-        templateName: 'challengeResult',
-      });
+
+      if (emailQueue) {
+        await emailQueue.add('sendChallengeResultEmail', {
+          recipientId: participantId,
+          opponentName,
+          courseTitle,
+          outcome,
+          yourScore,
+          opponentScore,
+          matchSummaryLink: `${process.env.FRONTEND_URL}${matchSummaryLink}`,
+          challengeId,
+          templateName: 'challengeResult',
+        });
+      }
 
       return notification;
     } catch (error) {
@@ -175,15 +188,17 @@ class NotificationService {
     try {
       const notification = new Notification({ userId, title, message, type: "reward_earned", metadata: rewardMetadata });
       await notification.save();
-      
-      await emailQueue.add('sendRewardEmail', {
-        recipientId: userId,
-        emailSubject: title,
-        emailBody: message,
-        rewardDetails: rewardMetadata,
-        templateName: 'rewardEarned',
-      })
-      
+
+      if (emailQueue) {
+        await emailQueue.add('sendRewardEmail', {
+          recipientId: userId,
+          emailSubject: title,
+          emailBody: message,
+          rewardDetails: rewardMetadata,
+          templateName: 'rewardEarned',
+        });
+      }
+
       return notification;
     } catch (error) {
       console.error("Error creating reward notification:", error);
