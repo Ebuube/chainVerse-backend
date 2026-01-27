@@ -7,12 +7,27 @@ const mongoose = require('mongoose');
 const redis = require('redis');
 const json2csv = require('json2csv').Parser;
 
-const redisClient = redis.createClient({
-	url: process.env.REDIS_URL,
-});
+let redisClient = null;
 
-redisClient.on('error', (err) => console.log('Redis Client Error', err));
-redisClient.connect();
+// Only connect to Redis if available and enabled
+if (process.env.REDIS_URL && process.env.FORCE_REDIS === 'true') {
+	try {
+		redisClient = redis.createClient({
+			url: process.env.REDIS_URL,
+		});
+
+		redisClient.on('error', (err) => {
+			console.log('Redis Client Error', err);
+		});
+
+		redisClient.connect().catch(err => {
+			console.error('Failed to connect to Redis:', err);
+			redisClient = null;
+		});
+	} catch (error) {
+		console.error('Failed to initialize Redis client:', error.message);
+	}
+}
 
 const getCachedData = (key) =>
 	new Promise((resolve) => {
