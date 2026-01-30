@@ -110,22 +110,32 @@ exports.signIn = async (req, res) => {
         message: "account not verified",
       });
     }
-    const accessToken = jwt.sign({ sub: existingStudent._id }, process.env.JWT_ACCESS_TOKEN, {
+      const accessSecret = process.env.JWT_ACCESS_TOKEN || process.env.JWT_SECRET;
+      const refreshSecret = process.env.JWT_REFRESH_TOKEN || process.env.JWT_SECRET;
+      if (!accessSecret || !refreshSecret) {
+         throw new Error('JWT secrets not configured: set JWT_ACCESS_TOKEN and JWT_REFRESH_TOKEN (or JWT_SECRET)');
+      }
+
+      const accessToken = jwt.sign({ sub: existingStudent._id }, accessSecret, {
       expiresIn: "15m",
     });
-    const refreshToken = jwt.sign({ sub: existingStudent._id }, process.env.JWT_REFRESH_TOKEN, {
+      const refreshToken = jwt.sign({ sub: existingStudent._id }, refreshSecret, {
       expiresIn: "24h",
     });
     const hashedRefreshToken = doHmac(refreshToken, process.env.CRYPTO_KEY);
     existingStudent.refreshToken = hashedRefreshToken;
     await existingStudent.save();
-    await LoginLog.create({
-      userId: user._id,
-      ipAddress,
-      device: parseDevice(userAgent),
-      browser: parseBrowser(userAgent),
-      status: loginSuccess ? 'success' : 'failure',
-    });
+      try {
+         await LoginLog.create({
+            userId: existingStudent._id,
+            ipAddress: String(ipAddress),
+            device: userAgent || 'unknown',
+            browser: userAgent || 'unknown',
+            status: 'success',
+         });
+      } catch (logError) {
+         logger.warn('LoginLog create failed', { message: logError?.message });
+      }
     res.cookie("accessToken", accessToken, {
       maxAge: ACCESS_TOKEN_EXPIRY,
       sameSite: "lax",
@@ -145,6 +155,12 @@ exports.signIn = async (req, res) => {
       accessToken,
     });
   } catch (error) {
+      logger.error('Signin error', {
+         message: error?.message,
+         name: error?.name,
+         stack: error?.stack,
+         email: req?.body?.email,
+      });
     const statusCode = error.details ? 400 : 500;
     const message = error.details ? error.details[0].message : "Something is wrong, we are fixing it";
     return res.status(statusCode).json({ status: "fail", message });
