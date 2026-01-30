@@ -4,10 +4,46 @@ const StudentSchema = new mongoose.Schema({
   name: {
     type: String,
   },
+  firstName: {
+    type: String,
+    trim: true,
+  },
+  lastName: {
+    type: String,
+    trim: true,
+  },
   email: {
     type: String,
     required: true,
     unique: true
+  },
+  password: {
+    type: String,
+    select: false,
+  },
+  verified: {
+    type: Boolean,
+    default: false,
+  },
+  verificationCode: {
+    type: String,
+    select: false,
+  },
+  verificationCodeValidation: {
+    type: Date,
+    select: false,
+  },
+  refreshToken: {
+    type: String,
+    select: false,
+  },
+  forgotPasswordCode: {
+    type: String,
+    select: false,
+  },
+  forgotPasswordCodeValidation: {
+    type: Date,
+    select: false,
   },
   enrolledCourses: [{
     type: mongoose.Schema.Types.ObjectId,
