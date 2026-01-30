@@ -1,4 +1,5 @@
-const { Student, RevokedToken } = require("../models/student");
+const Student = require("../models/student");
+const RevokedToken = require("../models/revokedToken");
 const {
   signUpSchema,
   signInSchema,
@@ -12,6 +13,7 @@ const jwt = require("jsonwebtoken");
 const { sendEmail } = require("../utils/sendMail");
 const passport = require("../config/database/passport");
 const LoginLog = require("../models/loginsLog");
+const logger = require("../utils/logger");
 
 const VERIFICATION_CODE_EXPIRY = 5 * 60 * 1000; // 5m
 const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15m
@@ -22,6 +24,7 @@ exports.signUp = async (req, res) => {
   // [Existing signUp logic remains unchanged]
   const { firstName, lastName, email, password } = req.body;
   try {
+      const isProd = String(process.env.NODE_ENV).toLowerCase() === 'production';
     await signUpSchema.validateAsync({ firstName, lastName, email, password });
     const existingStudent = await Student.findOne({ email });
     if (existingStudent) {
@@ -38,22 +41,42 @@ exports.signUp = async (req, res) => {
       password: hashedPassword,
     });
     const verificationCode = Math.floor(Math.random() * 1e6).toString();
-    const info = await sendEmail(newStudent.email, verificationCode, "Account verification");
-    if (!info) {
-      return res.status(500).json({
-        status: "error",
-        message: "student registered successfully, failed to send verification code to email",
+
+      // Compute HMAC before saving so missing crypto config is caught deterministically.
+      const hashedVerificationCode = doHmac(verificationCode, process.env.CRYPTO_KEY);
+
+      // Attempt to send email. In non-production, allow signup to proceed even if email fails.
+      const emailSent = await sendEmail(newStudent.email, verificationCode, "Account verification");
+      if (isProd && !emailSent) {
+         return res.status(500).json({
+            status: "error",
+            message: "Failed to send verification code email",
+         });
+      }
+
+      newStudent.verificationCode = hashedVerificationCode;
+      newStudent.verificationCodeValidation = Date.now();
+      await newStudent.save();
+
+      if (!emailSent && !isProd) {
+         return res.status(201).json({
+            status: "success",
+            message: "student registered successfully (email not sent in this environment)",
+            verificationCode,
+         });
+      }
+
+      return res.status(201).json({
+         status: "success",
+         message: "student registered successfully, please verify your email",
       });
-    }
-    const hashedVerificationCode = doHmac(verificationCode, process.env.CRYPTO_KEY);
-    newStudent.verificationCode = hashedVerificationCode;
-    newStudent.verificationCodeValidation = Date.now();
-    await newStudent.save();
-    return res.status(201).json({
-      status: "success",
-      message: "student registered successfully, please verify your email",
-    });
   } catch (error) {
+      logger.error('Signup error', {
+         message: error?.message,
+         name: error?.name,
+         stack: error?.stack,
+         email: req?.body?.email,
+      });
     const statusCode = error.details ? 400 : 500;
     const message = error.details ? error.details[0].message : "Something is wrong, we are working on it";
     return res.status(statusCode).json({ status: "fail", message });
@@ -63,8 +86,8 @@ exports.signUp = async (req, res) => {
 exports.signIn = async (req, res) => {
   // [Existing signIn logic remains unchanged]
   const { email, password } = req.body;
-  const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;   
-  const userAgent = req.get('User-Agent'); 
+  const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  const userAgent = req.get('User-Agent');
   try {
     await signInSchema.validateAsync({ email, password });
     const existingStudent = await Student.findOne({ email }).select("+password");
@@ -97,7 +120,7 @@ exports.signIn = async (req, res) => {
     existingStudent.refreshToken = hashedRefreshToken;
     await existingStudent.save();
     await LoginLog.create({
-      userId: user._id, 
+      userId: user._id,
       ipAddress,
       device: parseDevice(userAgent),
       browser: parseBrowser(userAgent),
@@ -514,7 +537,7 @@ exports.googleCallback = [
        if (!student) {
          return res.status(401).json({ status: "fail", message: "Authentication failed" });
        }
- 
+
        // Generate JWT tokens
        const accessToken = jwt.sign({ sub: student._id }, process.env.JWT_ACCESS_TOKEN, {
          expiresIn: "15m",
@@ -525,7 +548,7 @@ exports.googleCallback = [
        const hashedRefreshToken = doHmac(refreshToken, process.env.CRYPTO_KEY);
        student.refreshToken = hashedRefreshToken;
        await student.save();
- 
+
        // Set cookies
        res.cookie("accessToken", accessToken, {
          maxAge: ACCESS_TOKEN_EXPIRY,
@@ -540,7 +563,7 @@ exports.googleCallback = [
          secure: process.env.NODE_ENV === "production",
          path: "/refresh-token",
        });
- 
+
        return res.status(200).json({
          status: "success",
          message: "Logged in via Google",
